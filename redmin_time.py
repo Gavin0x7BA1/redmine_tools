@@ -12,7 +12,7 @@ import random
 import sys
 import tomllib
 import traceback
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import chinese_calendar as cal
@@ -126,12 +126,21 @@ def login(page, username: str, password: str, max_retries: int = 2) -> bool:
     return False
 
 
-def send_goodnight(hook: str, secret: str, username: str):
-    """打卡完成后发送钉钉消息。"""
+def send_dingtalk_greeting(hook: str, secret: str, username: str):
+    """打卡完成后按时间段发送钉钉问候消息。"""
     import dingding_bot
 
-    logger.info("准备发送钉钉消息...")
-    msg = f"晚安，{username}~"
+    user = username.split(".")[0]
+    now = datetime.now().time()
+
+    if now < datetime.strptime("10:00", "%H:%M").time():
+        msg = f"{user}: 快乐的一天开始了~"
+    elif now > datetime.strptime("16:30", "%H:%M").time():
+        msg = f"{user}: 今天真是快乐的一天~"
+    else:
+        msg = f"{user}: 天才，只是见我的门槛~"
+
+    logger.info("准备发送钉钉消息: %s", msg)
     dingding_bot.send_msg(msg, hook, secret)
     logger.info("钉钉消息已发送")
 
@@ -187,7 +196,7 @@ def run_once(config: dict, *, debug: bool):
 
     if bot_enabled:
         try:
-            send_goodnight(bot_hook, bot_secret, username)
+            send_dingtalk_greeting(bot_hook, bot_secret, username)
         except Exception as e:
             logger.error("钉钉消息发送失败: %s", e)
             logger.error(traceback.format_exc())

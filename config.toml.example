@@ -12,7 +12,7 @@ activity_id = "34"                  # 阶段 （34:开发）
 headless = true                     # true: 后台运行；false: 显示浏览器窗口（调试用）
 
 [dingtalk]
-enabled = false                     # 是否启用钉钉晚安消息推送
+enabled = false                     # 是否启用钉钉问候消息推送
 hook = "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxxxxx"
 secret = "SECxxxxxxxxxxx"
 
