@@ -1,0 +1,21 @@
+# Redmine 自动工时配置
+# 复制本文件为 config.toml 并填入真实信息后使用。
+# config.toml 包含敏感信息，已加入 .gitignore，请勿提交到版本库。
+
+[redmine]
+username = "your_username"          # Redmine 登录账号
+password = "your_password"          # Redmine 登录密码
+base_url = "http://1.2.3.4/redmine/projects/touch_fish/time_entries/new"  # 工时填报页面地址
+hours = 8                           # 每日工时
+comment_index = 0                   # 工时类型（0:正常， 1:加班）
+activity_id = "34"                  # 阶段 （34:开发）
+headless = true                     # true: 后台运行；false: 显示浏览器窗口（调试用）
+
+[dingtalk]
+enabled = false                     # 是否启用钉钉晚安消息推送
+hook = "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxxxxx"
+secret = "SECxxxxxxxxxxx"
+
+[log]
+debug = false                       # true: 同时输出日志到控制台；false: 仅写入日志文件
+file = "redmine_time.log"           # 日志文件路径

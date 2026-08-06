@@ -1,148 +1,187 @@
 # -*- coding: utf-8 -*-
-from playwright.sync_api import sync_playwright
-import dingding_bot, requests, sys
-import chinese_calendar as cal
+"""
+Redmine 自动填写工时脚本。
+
+通过 Windows 任务计划程序调用，仅在工作日执行。
+配置从同目录下的 config.toml 读取，敏感信息（账号、密码、钉钉密钥等）不再硬编码。
+"""
+
+import argparse
+import logging
+import sys
+import tomllib
+import traceback
 from datetime import date
-import time, json, random, os
-import argparse, logging, traceback
+from pathlib import Path
 
-# 安装环境(python 3.14.0):
-# pip install playwright
-# playwright install chromium
+import chinese_calendar as cal
+from playwright.sync_api import sync_playwright
 
-# ========== 配置 ==========
-USERNAME = "wukong"
-PASSWORD = "O2cewK8*vcthI9Q#6iabJvOLEZDt4!yQ"
-BASE_URL = "http://1.2.3.4/redmine/projects/touch_fish/time_entries/new"
-BOT_MSG = True
-BOT_HOOK="https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxxxxx"
-BOT_KEY="SECxxxxxxxxxxx"
-HEADLESS = True          # 调通后可设为 True 后台运行
-# ==========================
 
-LOG_FILE = "redmine_time.log"
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("config.toml")
+DEFAULT_LOG_FILE = Path(__file__).with_name("redmine_time.log")
+
 logger = logging.getLogger("redmine_time")
 
 
-def setup_logging(debug: bool):
-    """配置日志：debug=True时输出到控制台+文件，否则仅输出到文件"""
+def load_config(path: Path = DEFAULT_CONFIG_PATH) -> dict:
+    """加载 TOML 配置文件；文件不存在或解析失败时抛出异常。"""
+    if not path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {path}")
+
+    with path.open("rb") as f:
+        return tomllib.load(f)
+
+
+def setup_logging(*, debug: bool, log_file: Path):
+    """配置日志：debug=True 时同时输出到控制台，否则仅写入文件。"""
     level = logging.DEBUG if debug else logging.INFO
     logger.setLevel(level)
-    # 清空已有 handler，避免重复添加
     logger.handlers = []
 
     formatter = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # 文件 handler（始终启用，记录 INFO 及以上）
-    fh = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="a")
+    fh = logging.FileHandler(log_file, encoding="utf-8", mode="a")
     fh.setLevel(logging.INFO)
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 
-    # 控制台 handler（debug 模式启用）
     if debug:
         ch = logging.StreamHandler(sys.stdout)
         ch.setLevel(logging.DEBUG)
         ch.setFormatter(formatter)
         logger.addHandler(ch)
 
-    
-def input_time(page):
-    """填写 8h 并提交工时"""
+
+def fill_time_entry(page, hours: str, comment_index: int, activity_id: str):
+    """填写工时并提交。"""
     logger.info("开始填写工时...")
-    page.fill("#time_entry_hours", "8")
-    logger.debug(" filled hours: 8")
-    page.select_option("#time_entry_comments", index=0)
-    logger.debug(" selected comment index 0")
-    page.select_option("#time_entry_activity_id", "34")
-    logger.debug(" selected activity id 34")
+    page.fill("#time_entry_hours", str(hours))
+    logger.debug(" filled hours: %s", hours)
+
+    page.select_option("#time_entry_comments", index=comment_index)
+    logger.debug(" selected comment index %s", comment_index)
+
+    page.select_option("#time_entry_activity_id", activity_id)
+    logger.debug(" selected activity id %s", activity_id)
+
     page.click('input[name="commit"]')
-    logger.info("点击提交按钮，等待 10 秒...")
-    page.wait_for_timeout(10_000)
-    page.close()
-    logger.info("页面已关闭")
+    logger.info("点击提交按钮，等待页面响应...")
+    page.wait_for_load_state("networkidle")
+    logger.info("工时提交完成")
 
-def login(page):
-    """登录入口"""
-    logger.info("检测到登录页，开始登录...")
-    page.fill("#username", USERNAME)
-    logger.debug(f" filled username: {USERNAME}")
-    page.fill("#password", PASSWORD)
-    logger.debug(" filled password: ***")
-    page.click("#login-submit")
-    logger.info("点击登录，等待跳转...")
-    page.wait_for_load_state("networkidle")  # 等跳转完成
-    # 如果登录按钮还在，说明登录失败
-    if page.locator("#login-submit").count():
-        logger.warning("登录失败，页面仍有登录按钮，准备重试...")
-        page.reload()
-        login(page)
-    else:
-        logger.info("登录成功")
-        input_time(page)
 
-def main():
-    logger.info("=" * 40)
-    logger.info("脚本启动")
-    logger.info(f"今天是: {date.today()}, 是否工作日: {cal.is_workday(date.today())}")
-    
-    try:
-        with sync_playwright() as p:
-            logger.info(f"启动浏览器, headless={HEADLESS}")
-            browser = p.chromium.launch(headless=HEADLESS)
-            page = browser.new_page()
-            logger.info(f"访问: {BASE_URL}")
-            page.goto(BASE_URL)
-            page.wait_for_load_state("networkidle")  # 等跳转完成
+def login(page, username: str, password: str, max_retries: int = 2) -> bool:
+    """执行登录，最多重试 max_retries 次。返回是否成功。"""
+    for attempt in range(1, max_retries + 1):
+        logger.info("第 %d/%d 次尝试登录...", attempt, max_retries)
+        page.fill("#username", username)
+        logger.debug(" filled username: %s", username)
+        page.fill("#password", password)
+        logger.debug(" filled password: ***")
+
+        page.click("#login-submit")
+        page.wait_for_load_state("networkidle")
+
+        if not page.locator("#login-submit").count():
+            logger.info("登录成功")
+            return True
+
+        logger.warning("登录失败，页面仍存在登录按钮")
+        if attempt < max_retries:
+            page.reload()
+
+    logger.error("登录失败，已达最大重试次数")
+    return False
+
+
+def send_goodnight(hook: str, secret: str, username: str):
+    """打卡完成后发送钉钉消息。"""
+    import dingding_bot
+
+    logger.info("准备发送钉钉消息...")
+    msg = f"晚安，{username}~"
+    dingding_bot.send_msg(msg, hook, secret)
+    logger.info("钉钉消息已发送")
+
+
+def run_once(config: dict, *, debug: bool):
+    """执行一次完整的打卡流程。"""
+    redmine = config.get("redmine", {})
+    username = redmine["username"]
+    password = redmine["password"]
+    base_url = redmine["base_url"]
+    hours = redmine.get("hours", 8)
+    comment_index = redmine.get("comment_index", 0)
+    activity_id = redmine.get("activity_id", "34")
+    # debug 模式强制显示浏览器窗口，方便排查问题
+    headless = not debug and redmine.get("headless", True)
+
+    dingtalk = config.get("dingtalk", {})
+    bot_enabled = dingtalk.get("enabled", False)
+    bot_hook = dingtalk.get("hook", "")
+    bot_secret = dingtalk.get("secret", "")
+
+    with sync_playwright() as p:
+        logger.info("启动浏览器, headless=%s", headless)
+        browser = p.chromium.launch(headless=headless)
+        page = browser.new_page()
+
+        try:
+            logger.info("访问: %s", base_url)
+            page.goto(base_url)
+            page.wait_for_load_state("networkidle")
             logger.info("页面加载完成")
 
-            # 判断是否需要登录
-            login_btn_count = page.locator("#login-submit").count()
-            logger.debug(f"登录按钮数量: {login_btn_count}")
-            if login_btn_count:
-                login(page)
-            else:
-                logger.info("无需登录，直接填写工时")
-                input_time(page)
+            if page.locator("#login-submit").count():
+                if not login(page, username, password):
+                    raise RuntimeError("Redmine 登录失败")
 
+            fill_time_entry(page, hours, comment_index, activity_id)
+        finally:
+            page.close()
             browser.close()
             logger.info("浏览器已关闭")
-            
-            if BOT_MSG:
-                logger.info("准备发送钉钉消息...")
-                question, opts = get_question_form_json()
-                logger.debug(f"question: {question[:50]}...")
-                logger.debug(f"answer: {opts[:50]}...")
-                dingding_bot.send_msg(question, BOT_HOOK, BOT_KEY)
-                logger.info("问题已发送，等待 10 分钟后发送答案...")
-                time.sleep(600)
-                dingding_bot.send_msg(opts, BOT_HOOK, BOT_KEY)
-                logger.info("答案已发送")
-            else:
-                logger.info("BOT_MSG=False，跳过钉钉消息")
-                
+
+    if bot_enabled:
+        try:
+            send_goodnight(bot_hook, bot_secret, username)
+        except Exception as e:
+            logger.error("钉钉消息发送失败: %s", e)
+            logger.error(traceback.format_exc())
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Redmine 自动填写工时脚本")
+    parser.add_argument("--config", "-c", type=Path, default=DEFAULT_CONFIG_PATH, help="配置文件路径")
+    parser.add_argument("--debug", "-d", action="store_true", help="开启 debug 模式：日志输出到控制台并显示浏览器窗口")
+    args = parser.parse_args()
+
+    config = load_config(args.config)
+
+    debug = args.debug or config.get("log", {}).get("debug", False)
+    log_file = Path(config.get("log", {}).get("file", DEFAULT_LOG_FILE))
+    setup_logging(debug=debug, log_file=log_file)
+
+    logger.info("=" * 40)
+    logger.info("脚本启动")
+    logger.info("今天是: %s, 是否工作日: %s", date.today(), cal.is_workday(date.today()))
+
+    if not cal.is_workday(date.today()):
+        logger.info("今天不是工作日，跳过打卡")
+        return
+
+    try:
+        run_once(config, debug=debug)
         logger.info("脚本执行完毕")
     except Exception as e:
-        logger.error(f"脚本执行异常: {e}")
+        logger.error("脚本执行异常: %s", e)
         logger.error(traceback.format_exc())
-        raise
+        sys.exit(1)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Redmine 自动打卡脚本")
-    parser.add_argument("--debug", "-d", action="store_true", help="开启 debug 日志输出到控制台")
-    args = parser.parse_args()
-    
-    # setup_logging(args.debug)
-    setup_logging(True)
-    
-    if cal.is_workday(date.today()):
-        try:
-            main()
-        except Exception:
-            sys.exit(1)
-    else:
-        logger.info("今天不是工作日，跳过打卡")
-    sys.exit(0)
+    main()

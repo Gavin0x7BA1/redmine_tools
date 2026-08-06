@@ -1,0 +1,25 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+pip-wheel-metadata/
+venv/
+env/
+.venv/
+.env/
+
+# === 敏感配置 ===
+config.toml
+
+# === IDE / 编辑器 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
