@@ -86,7 +86,11 @@ def fill_time_entry(
     ).check()
     logger.debug(" selected use_ai: %s", use_ai)
 
-    non_ai_hours = random.randint(1, int(hours)) * 0.5
+    # 非 AI 计划工时：2 到 (工时 - 2) 之间，以 0.5h 为步长
+    min_hours, max_hours = 2, int(hours) - 2
+    non_ai_hours = random.choice(
+        [i * 0.5 for i in range(min_hours * 2, max_hours * 2 + 1)]
+    )
     page.fill("#time_entry_custom_field_values_118", str(non_ai_hours))
     logger.debug(" filled non-AI hours: %s", non_ai_hours)
 
