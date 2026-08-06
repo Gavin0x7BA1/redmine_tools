@@ -91,8 +91,10 @@ def fill_time_entry(
     non_ai_hours = random.choice(
         [i * 0.5 for i in range(min_hours * 2, max_hours * 2 + 1)]
     )
-    page.fill("#time_entry_custom_field_values_118", str(non_ai_hours))
-    logger.debug(" filled non-AI hours: %s", non_ai_hours)
+    # 整数时显示为整数（如 6 而不是 6.0）
+    non_ai_hours_text = str(int(non_ai_hours)) if non_ai_hours.is_integer() else str(non_ai_hours)
+    page.fill("#time_entry_custom_field_values_118", non_ai_hours_text)
+    logger.debug(" filled non-AI hours: %s", non_ai_hours_text)
 
     page.click('input[name="commit"]')
     logger.info("点击提交按钮，等待页面响应...")
