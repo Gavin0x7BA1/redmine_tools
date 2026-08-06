@@ -16,6 +16,10 @@ enabled = false                     # 是否启用钉钉晚安消息推送
 hook = "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxxxxx"
 secret = "SECxxxxxxxxxxx"
 
+[custom_fields]
+activity_type = "功能开发"          # 活动类型
+use_ai = true                       # 是否使用 AI
+
 [log]
 debug = false                       # true: 同时输出日志到控制台；false: 仅写入日志文件
 file = "redmine_time.log"           # 日志文件路径

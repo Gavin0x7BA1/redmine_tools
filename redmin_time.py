@@ -8,6 +8,7 @@ Redmine 自动填写工时脚本。
 
 import argparse
 import logging
+import random
 import sys
 import tomllib
 import traceback
@@ -56,7 +57,14 @@ def setup_logging(*, debug: bool, log_file: Path):
         logger.addHandler(ch)
 
 
-def fill_time_entry(page, hours: str, comment_index: int, activity_id: str):
+def fill_time_entry(
+    page,
+    hours: str,
+    comment_index: int,
+    activity_id: str,
+    activity_type: str = "功能开发",
+    use_ai: bool = True,
+):
     """填写工时并提交。"""
     logger.info("开始填写工时...")
     page.fill("#time_entry_hours", str(hours))
@@ -67,6 +75,20 @@ def fill_time_entry(page, hours: str, comment_index: int, activity_id: str):
 
     page.select_option("#time_entry_activity_id", activity_id)
     logger.debug(" selected activity id %s", activity_id)
+
+    # Redmine 自定义字段
+    page.select_option("#time_entry_custom_field_values_116", activity_type)
+    logger.debug(" selected activity type: %s", activity_type)
+
+    ai_value = "1" if use_ai else "0"
+    page.locator(
+        f'input[name="time_entry[custom_field_values][117]"][value="{ai_value}"]'
+    ).check()
+    logger.debug(" selected use_ai: %s", use_ai)
+
+    non_ai_hours = random.randint(1, int(hours)) * 0.5
+    page.fill("#time_entry_custom_field_values_118", str(non_ai_hours))
+    logger.debug(" filled non-AI hours: %s", non_ai_hours)
 
     page.click('input[name="commit"]')
     logger.info("点击提交按钮，等待页面响应...")
@@ -120,6 +142,10 @@ def run_once(config: dict, *, debug: bool):
     # debug 模式强制显示浏览器窗口，方便排查问题
     headless = not debug and redmine.get("headless", True)
 
+    custom_fields = config.get("custom_fields", {})
+    activity_type = custom_fields.get("activity_type", "功能开发")
+    use_ai = custom_fields.get("use_ai", True)
+
     dingtalk = config.get("dingtalk", {})
     bot_enabled = dingtalk.get("enabled", False)
     bot_hook = dingtalk.get("hook", "")
@@ -140,7 +166,14 @@ def run_once(config: dict, *, debug: bool):
                 if not login(page, username, password):
                     raise RuntimeError("Redmine 登录失败")
 
-            fill_time_entry(page, hours, comment_index, activity_id)
+            fill_time_entry(
+                page,
+                hours,
+                comment_index,
+                activity_id,
+                activity_type=activity_type,
+                use_ai=use_ai,
+            )
         finally:
             page.close()
             browser.close()

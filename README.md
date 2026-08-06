@@ -5,6 +5,7 @@
 ## 功能
 
 - 自动登录 Redmine 并填报工时
+- 自动填写 Redmine 自定义字段：活动类型、是否使用 AI、不使用 AI 的计划工时
 - 仅工作日执行（支持调休，依赖 `chinese_calendar`）
 - 打卡成功后可选发送钉钉消息
 - 配置从 `config.toml` 读取，敏感信息不再硬编码
@@ -31,7 +32,13 @@ playwright install chromium
 copy config.toml.example config.toml
 ```
 
-2. 编辑 `config.toml`，填写 Redmine 账号、密码、页面地址以及钉钉机器人信息。
+2. 编辑 `config.toml`，填写 Redmine 账号、密码、页面地址、自定义字段以及钉钉机器人信息。
+
+自定义字段说明：
+
+- `[custom_fields].activity_type`：活动类型，默认 `"功能开发"`
+- `[custom_fields].use_ai`：是否使用 AI，默认 `true`
+- 不使用 AI 的计划工时：自动生成 `1 到 工时数` 之间的随机整数乘以 `0.5`
 
 > **注意**：`config.toml` 已加入 `.gitignore`，不会提交到版本库，避免泄露敏感信息。
 
