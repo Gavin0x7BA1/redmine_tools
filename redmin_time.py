@@ -86,11 +86,12 @@ def fill_time_entry(
     ).check()
     logger.debug(" selected use_ai: %s", use_ai)
 
-    # 非 AI 计划工时：2 到 (工时 - 2) 之间，以 0.5h 为步长
-    min_hours, max_hours = 2, int(hours) - 2
-    non_ai_hours = random.choice(
-        [i * 0.5 for i in range(min_hours * 2, max_hours * 2 + 1)]
+    # 非 AI 计划工时：工时 + [2 到 (工时 - 2) 的随机数]，以 0.5h 为步长
+    min_add, max_add = 2, int(hours) - 2
+    extra_hours = random.choice(
+        [i * 0.5 for i in range(min_add * 2, max_add * 2 + 1)]
     )
+    non_ai_hours = hours + extra_hours
     # 整数时显示为整数（如 6 而不是 6.0）
     non_ai_hours_text = str(int(non_ai_hours)) if non_ai_hours.is_integer() else str(non_ai_hours)
     page.fill("#time_entry_custom_field_values_118", non_ai_hours_text)

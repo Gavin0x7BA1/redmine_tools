@@ -38,7 +38,7 @@ copy config.toml.example config.toml
 
 - `[custom_fields].activity_type`：活动类型，默认 `"功能开发"`
 - `[custom_fields].use_ai`：是否使用 AI，默认 `true`
-- 不使用 AI 的计划工时：自动生成 `1 到 工时数` 之间的随机整数乘以 `0.5`
+- 不使用 AI 的计划工时：`工时 + [2 到 (工时 - 2) 的随机数]`，步长 `0.5h`（即不使用 AI 时预计花费的工时）
 
 > **注意**：`config.toml` 已加入 `.gitignore`，不会提交到版本库，避免泄露敏感信息。
 
